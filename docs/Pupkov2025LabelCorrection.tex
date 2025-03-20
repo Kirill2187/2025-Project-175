@@ -7,6 +7,8 @@
 
 \usepackage{natbib}
 \usepackage{hyperref} 
+\usepackage{float}
+
 
 \hypersetup{
     colorlinks=true,
@@ -70,6 +72,40 @@ To address this, \citet{also} propose the following reformulation:
 where \(\tau > 0\) is the regularization parameter (temperature), \(\text{KL}[\cdot\|\cdot]\) denotes the KL-divergence between two distributions, and \(\hat{\pi}\) is a prior distribution of weights from \(\Delta_{n-1}\). A simple baseline choice for \(\hat{\pi}\) is the uniform distribution \(\hat{\pi} = \mathcal{U}(\mathbf{1}, n)\). This formulation encourages higher weights for samples that are more difficult to classify correctly, helping identify potentially mislabeled data.
 
 In later sections, we demonstrate how to leverage iteratively computed weights \(\pi_i\) to effectively identify and correct mislabeled data points.
+
+\section{Experiments}
+
+\subsection{Data}
+
+To evaluate the effectiveness of our algorithm, we conducted experiments using the MNIST dataset \citep{deng2012mnist}, which consists of 60,000 28$\times$28 grayscale images of handwritten digits. To simulate label noise we randomly selected a proportion $p$ of samples from the training set and assigned them incorrect labels. We then compared our algorithm against baseline methods across various noise levels to assess its performance.
+
+\subsection{Evaluation Metrics}
+
+We evaluated the performance of our approach using multiple metrics:
+
+\begin{enumerate}
+    \item \textbf{Precision}: The fraction of samples identified as mislabeled that were actually mislabeled
+    \item \textbf{Recall}: The fraction of truly mislabeled samples that were successfully identified by the algorithm
+    \item \textbf{Test Accuracy}: The classification accuracy achieved on the clean, uncorrupted test set after training with our noise-handling approach
+\end{enumerate}
+
+All experiments were run 5 times with different random seeds, and we report 95\% confidence intervals in our plots to account for variability.
+
+\subsection{Baseline}
+
+\subsection{Results}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\linewidth]{figures/example_plot.jpg}
+    \caption{Performance comparison of our proposed method versus baseline approach across different noise levels. Bars represent 95\% confidence intervals over 5 runs.}
+    \label{fig:noise_detection}
+\end{figure}
+
+As shown in Figure~\ref{fig:noise_detection}, our method consistently outperforms the baseline approach in identifying mislabeled examples, particularly as the noise level increases.
+
+
+
 
 
 
