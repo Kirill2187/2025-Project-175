@@ -1,0 +1,20 @@
+experiment:
+  name: adamw_corrupted
+  seed: 42
+  output_dir: ./outputs/${experiment.name}
+  wandb_log: false
+
+training:
+  batch_size: 64
+  epochs: 5
+  optimizer:
+    type: adamw
+    lr: 0.001
+    weight_decay: 0.0001
+
+includes:
+  - models/simple_cnn.yaml
+  - datasets/mnist_corrupted.yaml
+
+
+

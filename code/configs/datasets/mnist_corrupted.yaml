@@ -1,0 +1,11 @@
+data:
+  dataset: mnist
+  corruption:
+    - type: swap
+      from: 0
+      to:   6
+      p:    0.4
+
+    - type: random_swap
+      from: 1
+      p:    0.4

@@ -1,0 +1,23 @@
+experiment:
+  name: adversarial_corrupted
+  seed: 42
+  output_dir: ./outputs/${experiment.name}
+  wandb_log: false
+
+training:
+  batch_size: 64
+  epochs: 5
+  optimizer:
+    type: adversarial
+    data_len: 60000
+    batch_size: ${training.batch_size}
+    lr: 0.001
+    weight_decay: 0.0001
+    mode: extragrad
+
+includes:
+  - models/simple_cnn.yaml
+  - datasets/mnist_corrupted.yaml
+
+
+

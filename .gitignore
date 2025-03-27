@@ -1,2 +1,10 @@
 .venv/
+
 data/
+outputs/
+
+__pycache__/
+.ipynb_checkpoints/
+*.pyc
+
+.vscode/
