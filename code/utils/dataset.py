@@ -4,6 +4,8 @@ from torchvision.datasets import MNIST
 from torchvision import transforms
 import numpy as np
 
+import logging
+
 class CorruptedMNISTDataset(Dataset):
     def __init__(self, root, train=True, corruption_config=None, transform=None, download=True):
         self.dataset = MNIST(root=root, train=train, transform=transform, download=download)
@@ -37,6 +39,20 @@ class CorruptedMNISTDataset(Dataset):
                     raise ValueError(f"Unsupported corruption type: {rule['type']}")
         
         self.is_correct = self.corrupted_labels == self.true_labels
+        
+    def change_labels(self, indices, new_labels):
+        is_correct_before = self.is_correct[indices].copy()
+        
+        self.corrupted_labels[indices] = new_labels
+        self.is_correct[indices] = self.corrupted_labels[indices] == self.true_labels[indices]
+        
+        is_correct_after = self.is_correct[indices]
+        
+        fp = np.sum(is_correct_before & ~is_correct_after)
+        tp = np.sum(~is_correct_before & is_correct_after)
+        total = len(indices)
+        
+        logging.info(f"Labels changed for {total} samples: {fp} FP, {tp} TP.")
     
     def __getitem__(self, index):
         image, _ = self.dataset[index]

@@ -6,11 +6,17 @@ experiment:
 
 training:
   batch_size: 64
-  epochs: 5
+  epochs: 12
   optimizer:
     type: adamw
     lr: 0.001
     weight_decay: 0.0001
+
+  correction:
+    method: model
+    params:
+      interval: 3
+      top_p: 0.02
 
 includes:
   - models/simple_cnn.yaml

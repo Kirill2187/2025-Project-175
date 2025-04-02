@@ -6,14 +6,22 @@ experiment:
 
 training:
   batch_size: 64
-  epochs: 5
+  epochs: 12
   optimizer:
     type: adversarial
     data_len: 60000
     batch_size: ${training.batch_size}
     lr: 0.001
     weight_decay: 0.0001
+    pi_lr: 0.0001
+    pi_decay: 0.01
     mode: extragrad
+  
+  correction:
+    method: model
+    params:
+      interval: 3
+      top_p: 0.02
 
 includes:
   - models/simple_cnn.yaml

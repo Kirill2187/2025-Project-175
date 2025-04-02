@@ -9,7 +9,7 @@ class AdversarialOptimizer(torch.optim.Optimizer):
                  pi_decay=1e-7,  # eps=np.finfo(np.float32).eps,
                  eps=1e-20,
                  amsgrad=False,
-                 mode='extragrad', log=False, pi_lr=1, pi_reg=None):
+                 mode='extragrad', log=False, pi_lr=1e-3, pi_reg=None):
 
         defaults = dict(lr=lr, betas=betas, amsgrad=amsgrad)
         super(AdversarialOptimizer, self).__init__(params, defaults=defaults)

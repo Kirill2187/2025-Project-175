@@ -19,6 +19,8 @@ from utils import (
     AdversarialOptimizer
 )
 
+from utils.correction import create_correction_strategy
+
 def evaluate(model, data_loader, device):
     """Evaluate model on given data loader and return accuracy."""
     model.eval()
@@ -79,6 +81,7 @@ def main(args):
     logging.info(f"Model created and moved to device {device}")
     
     criterion = nn.CrossEntropyLoss(reduction='none')
+    correction_strategy = create_correction_strategy(config, model, train_dataset)
     
     optimizer_config = config['training']['optimizer']
     if optimizer_config['type'].lower() not in ['adamw', 'adversarial']:
@@ -96,7 +99,18 @@ def main(args):
     num_epochs = config['training']['epochs']
     train_size = len(train_dataset)
     losses_array = np.zeros((num_epochs, train_size))
+    labels_history = np.zeros((num_epochs, train_size))
     val_accuracies = []
+    
+    output_dir = config['experiment']['output_dir']
+    os.makedirs(output_dir, exist_ok=True)
+    losses_file_name = "losses.npy" if optimizer_config['type'].lower() == 'adamw' else "weights.npy"
+    losses_path = os.path.join(output_dir, losses_file_name)
+    
+    true_labels = train_dataset.true_labels
+    corrupted_labels = train_dataset.corrupted_labels
+    np.save(os.path.join(output_dir, "true_labels.npy"), true_labels)
+    np.save(os.path.join(output_dir, "corrupted_labels.npy"), corrupted_labels)
     
     logging.info(f"Beginning training for {num_epochs} epochs")
     model.train()
@@ -111,15 +125,15 @@ def main(args):
             def closure(weights, loss_scale):
                 optimizer.zero_grad()
                 outputs = model(images)
-                losses = criterion(outputs, labels) * weights * loss_scale
-                loss = losses.sum()
+                losses = criterion(outputs, labels) * loss_scale
+                loss = (weights * losses).sum()
                 loss.backward()
-                return losses, loss
+                return losses, losses.mean().item() / loss_scale
             closure.device = device
             
             if optimizer_config['type'].lower() == 'adversarial':
                 optimizer.step(closure, indices)
-                loss = optimizer.loss  
+                loss = optimizer.loss
             else:
                 optimizer.zero_grad()
                 outputs = model(images)
@@ -130,29 +144,25 @@ def main(args):
                 optimizer.step()
             
                 losses_array[epoch, indices] = loss_vector.detach().cpu().numpy()
+                loss = loss.item()
             
-            epoch_loss_sum += loss.item() * images.size(0)
+            epoch_loss_sum += loss * images.size(0)
         
         if optimizer_config['type'].lower() == 'adversarial':
             losses_array[epoch] = optimizer.pi.detach().cpu().numpy()
         avg_loss = epoch_loss_sum / train_size
+        
+        correction_strategy.step(losses_array[epoch])
+        labels_history[epoch] = train_dataset.corrupted_labels
         
         val_accuracy = evaluate(model, val_loader, device)
         val_accuracies.append(val_accuracy)
         
         logging.info(f"Epoch {epoch + 1} average loss: {avg_loss:.4f}, validation accuracy: {val_accuracy:.4f}")
     
-    output_dir = config['experiment']['output_dir']
-    os.makedirs(output_dir, exist_ok=True)
-    name = "losses.npy" if optimizer_config['type'].lower() == 'adamw' else "weights.npy"
-    losses_path = os.path.join(output_dir, name)
-    np.save(losses_path, losses_array)
-    logging.info(f"Saved array to {losses_path}")
-    
-    true_labels = train_dataset.true_labels
-    corrupted_labels = train_dataset.corrupted_labels
-    np.save(os.path.join(output_dir, "true_labels.npy"), true_labels)
-    np.save(os.path.join(output_dir, "corrupted_labels.npy"), corrupted_labels)
+        np.save(losses_path, losses_array)
+        np.save(os.path.join(output_dir, "labels_history.npy"), labels_history)
+        logging.info(f"Saved arrays")
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Train a model on corrupted MNIST using AdamW")
