@@ -8,6 +8,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
 from torchvision import transforms
+from tqdm import tqdm
 
 from utils import (
     load_config,
@@ -15,7 +16,7 @@ from utils import (
     set_seed,
     create_model,
     create_datasets,
-    mnist_collate_fn,
+    image_collate_fn,
     AdversarialOptimizer
 )
 
@@ -26,19 +27,22 @@ def evaluate(model, data_loader, device):
     model.eval()
     correct = 0
     total = 0
+    preds = np.zeros(len(data_loader.dataset))
+    preds.fill(-1)
     with torch.no_grad():
-        for batch in data_loader:
+        for batch in tqdm(data_loader):
             images = batch['image'].to(device)
             labels = batch['label'].to(device)
             
             outputs = model(images)
             _, predicted = torch.max(outputs.data, 1)
+            preds[batch['index']] = predicted.cpu().numpy()
             
             total += labels.size(0)
             correct += (predicted == labels).sum().item()
     
     accuracy = correct / total
-    return accuracy
+    return preds, accuracy
 
 def main(args):
     setup_logging(args.log_level)
@@ -64,14 +68,14 @@ def main(args):
         train_dataset,
         batch_size=config['training']['batch_size'],
         shuffle=True,
-        collate_fn=mnist_collate_fn
+        collate_fn=image_collate_fn
     )
     
     val_loader = DataLoader(
         val_dataset,
         batch_size=config['training']['batch_size'],
         shuffle=False,
-        collate_fn=mnist_collate_fn
+        collate_fn=image_collate_fn
     )
     
     input_shape = (1, 28, 28)
@@ -100,12 +104,17 @@ def main(args):
     train_size = len(train_dataset)
     losses_array = np.zeros((num_epochs, train_size))
     labels_history = np.zeros((num_epochs, train_size))
+    train_predictions = np.zeros((num_epochs, train_size)) 
+    train_predictions.fill(-1)
     val_accuracies = []
+    train_accuracies = []
     
     output_dir = config['experiment']['output_dir']
     os.makedirs(output_dir, exist_ok=True)
-    losses_file_name = "losses.npy" if optimizer_config['type'].lower() == 'adamw' else "weights.npy"
+    losses_file_name = "losses.npy"
     losses_path = os.path.join(output_dir, losses_file_name)
+    val_accuracies_path = os.path.join(output_dir, "val_accuracies.npy")
+    train_accuracies_path = os.path.join(output_dir, "train_accuracies.npy")
     
     true_labels = train_dataset.true_labels
     corrupted_labels = train_dataset.corrupted_labels
@@ -117,7 +126,7 @@ def main(args):
     for epoch in range(num_epochs):
         epoch_loss_sum = 0.0
         logging.info(f"Epoch {epoch + 1}/{num_epochs}")
-        for batch in train_loader:
+        for batch in tqdm(train_loader):
             images = batch['image'].to(device)
             labels = batch['label'].to(device)
             indices = batch['index']
@@ -155,13 +164,21 @@ def main(args):
         correction_strategy.step(losses_array[epoch])
         labels_history[epoch] = train_dataset.corrupted_labels
         
-        val_accuracy = evaluate(model, val_loader, device)
+        logging.info("Evaluating model...")
+        preds, train_accuracy = evaluate(model, train_loader, device)
+        train_predictions[epoch] = preds
+        train_accuracies.append(train_accuracy)
+        
+        _, val_accuracy = evaluate(model, val_loader, device)
         val_accuracies.append(val_accuracy)
         
-        logging.info(f"Epoch {epoch + 1} average loss: {avg_loss:.4f}, validation accuracy: {val_accuracy:.4f}")
+        logging.info(f"Epoch {epoch + 1} average loss: {avg_loss:.4f}, val acc: {val_accuracy:.4f}, train acc: {train_accuracy:.4f}")
     
+        np.save(os.path.join(output_dir, "train_predictions.npy"), train_predictions)
         np.save(losses_path, losses_array)
         np.save(os.path.join(output_dir, "labels_history.npy"), labels_history)
+        np.save(val_accuracies_path, val_accuracies)
+        np.save(train_accuracies_path, train_accuracies)
         logging.info(f"Saved arrays")
 
 if __name__ == '__main__':

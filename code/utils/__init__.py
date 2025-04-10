@@ -1,5 +1,5 @@
 from .config import load_config
-from .dataset import create_datasets, mnist_collate_fn
+from .dataset import create_datasets, image_collate_fn
 from .model import create_model
 from .adversarial import AdversarialOptimizer
 

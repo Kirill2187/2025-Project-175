@@ -1,12 +1,12 @@
 experiment:
-  name: adamw_corrupted
+  name: adamw_mnist_flip
   seed: 42
   output_dir: ./outputs/${experiment.name}
   wandb_log: false
 
 training:
   batch_size: 64
-  epochs: 12
+  epochs: 48
   optimizer:
     type: adamw
     lr: 0.001
@@ -16,11 +16,11 @@ training:
     method: model
     params:
       interval: 3
-      top_p: 0.02
+      top_p: 0.01
 
 includes:
-  - models/simple_cnn.yaml
-  - datasets/mnist_corrupted.yaml
+  - ../models/simple_cnn.yaml
+  - ../datasets/mnist_corrupted_flip_04.yaml
 
 
 

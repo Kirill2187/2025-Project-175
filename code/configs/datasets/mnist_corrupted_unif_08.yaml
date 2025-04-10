@@ -1,0 +1,5 @@
+data:
+  dataset: mnist
+  corruption:
+    - type: unif
+      p:    0.8
