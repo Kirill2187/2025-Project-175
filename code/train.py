@@ -28,6 +28,8 @@ def evaluate(model, data_loader, device):
     correct = 0
     total = 0
     preds = np.zeros(len(data_loader.dataset))
+    losses = np.zeros(len(data_loader.dataset))
+    criterion = nn.CrossEntropyLoss(reduction='none')
     preds.fill(-1)
     with torch.no_grad():
         for batch in tqdm(data_loader):
@@ -37,12 +39,13 @@ def evaluate(model, data_loader, device):
             outputs = model(images)
             _, predicted = torch.max(outputs.data, 1)
             preds[batch['index']] = predicted.cpu().numpy()
+            losses[batch['index']] = criterion(outputs, labels).cpu().numpy()
             
             total += labels.size(0)
             correct += (predicted == labels).sum().item()
     
     accuracy = correct / total
-    return preds, accuracy
+    return preds, losses, accuracy
 
 def main(args):
     setup_logging(args.log_level)
@@ -109,7 +112,8 @@ def main(args):
     val_accuracies = []
     train_accuracies = []
     
-    output_dir = config['experiment']['output_dir']
+    exp_name = os.path.splitext(os.path.basename(args.config))[0]
+    output_dir = f'outputs/{exp_name}'
     os.makedirs(output_dir, exist_ok=True)
     losses_file_name = "losses.npy"
     losses_path = os.path.join(output_dir, losses_file_name)
@@ -124,6 +128,7 @@ def main(args):
     logging.info(f"Beginning training for {num_epochs} epochs")
     model.train()
     for epoch in range(num_epochs):
+        predictions = np.zeros(len(train_loader.dataset))
         epoch_loss_sum = 0.0
         logging.info(f"Epoch {epoch + 1}/{num_epochs}")
         for batch in tqdm(train_loader):
@@ -151,7 +156,8 @@ def main(args):
                 loss = loss_vector.mean()
                 loss.backward()
                 optimizer.step()
-            
+                
+                predictions[indices] = outputs.argmax(dim=1).cpu().numpy()
                 losses_array[epoch, indices] = loss_vector.detach().cpu().numpy()
                 loss = loss.item()
             
@@ -161,18 +167,19 @@ def main(args):
             losses_array[epoch] = optimizer.pi.detach().cpu().numpy()
         avg_loss = epoch_loss_sum / train_size
         
-        correction_strategy.step(losses_array[epoch])
-        labels_history[epoch] = train_dataset.corrupted_labels
-        
         logging.info("Evaluating model...")
-        preds, train_accuracy = evaluate(model, train_loader, device)
-        train_predictions[epoch] = preds
+        preds_after, _, train_accuracy = evaluate(model, train_loader, device)
+        train_predictions[epoch] = preds_after
+        
         train_accuracies.append(train_accuracy)
         
-        _, val_accuracy = evaluate(model, val_loader, device)
+        _, _, val_accuracy = evaluate(model, val_loader, device)
         val_accuracies.append(val_accuracy)
         
         logging.info(f"Epoch {epoch + 1} average loss: {avg_loss:.4f}, val acc: {val_accuracy:.4f}, train acc: {train_accuracy:.4f}")
+        
+        labels_history[epoch] = train_dataset.corrupted_labels
+        correction_strategy.step(losses_array[epoch], predictions=predictions)
     
         np.save(os.path.join(output_dir, "train_predictions.npy"), train_predictions)
         np.save(losses_path, losses_array)
