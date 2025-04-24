@@ -71,9 +71,9 @@ class HardGMMCorrectionStrategy(BaseCorrectionStrategy):
     def step(self, losses: np.ndarray, *args, **kwargs):
         logging.debug("GMM correction step")
         
-        losses = losses.copy()
+        losses = np.clip(losses, 0, np.quantile(losses, 0.995))
         losses = (losses - np.mean(losses)) / np.std(losses)
-        losses_no_outliers = losses[losses < np.quantile(losses, 0.975)]
+        losses_no_outliers = losses[losses < np.quantile(losses, 0.95)]
                     
         gmm = GaussianMixture(n_components=2, covariance_type='diag')
         gmm.fit(losses_no_outliers.reshape(-1, 1))
@@ -83,6 +83,10 @@ class HardGMMCorrectionStrategy(BaseCorrectionStrategy):
         if mu1 > mu2:
             flipped = True
             mu1, sigma1, mu2, sigma2 = mu2, sigma2, mu1, sigma1
+            
+        goodness = gmm.score(losses.reshape(-1, 1))
+        logging.debug(f"Goodness of fit: {goodness}")
+            
         probas = gmm.predict_proba(losses.reshape(-1, 1))
         if flipped:
             probas = 1 - probas
@@ -94,6 +98,11 @@ class HardGMMCorrectionStrategy(BaseCorrectionStrategy):
         
         if len(self.intersections) == 1 or self.intersections[-1] < self.intersections[-2]:
             self.prev_corruption_probas = probas
+            return
+        
+        if sigma1 < 0.01:
+            self.prev_corruption_probas = probas
+            logging.info("Sigma too small, skipping correction")
             return
         
         # self.model.eval()
@@ -119,7 +128,7 @@ class HardGMMCorrectionStrategy(BaseCorrectionStrategy):
         self.train_dataset.change_labels(indices_to_correct, predictions[indices_to_correct])
         
         logging.debug("Resetting model parameters")
-        self.model.apply(lambda x: x.reset_parameters() if hasattr(x, 'reset_parameters') else None)
+        kwargs['reset_f']()
         
         self.intersections = []
         self.prev_corruption_probas = None

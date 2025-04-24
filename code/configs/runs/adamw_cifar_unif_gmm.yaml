@@ -1,0 +1,23 @@
+experiment:
+  seed: 42
+  wandb_log: false
+
+training:
+  batch_size: 64
+  epochs: 48
+  optimizer:
+    type: adamw
+    lr: 0.001
+    weight_decay: 0.0001
+
+  correction:
+    method: gmm_hard
+    params:
+      threshold: 0.99
+
+includes:
+  - ../models/resnet18.yaml
+  - ../datasets/cifar_corrupted_unif_08.yaml
+
+
+

@@ -98,10 +98,21 @@ def main(args):
         k: v
         for k, v in optimizer_config.items() if k != 'type'
     }
-    if optimizer_config['type'].lower() == 'adamw':
-        optimizer = optim.AdamW(model.parameters(), **optimizer_kwargs)
-    else:
-        optimizer = AdversarialOptimizer(model.parameters(), **optimizer_kwargs)
+    
+    optimizer = None
+        
+    def reset():
+        nonlocal optimizer, model
+        
+        model.apply(lambda x: x.reset_parameters() if hasattr(x, 'reset_parameters') else None)
+        
+        if optimizer_config['type'].lower() == 'adamw':
+            optimizer = optim.AdamW(model.parameters(), **optimizer_kwargs)
+        else:
+            optimizer = AdversarialOptimizer(model.parameters(), **optimizer_kwargs)
+        
+        
+    reset()
     
     num_epochs = config['training']['epochs']
     train_size = len(train_dataset)
@@ -139,10 +150,12 @@ def main(args):
             def closure(weights, loss_scale):
                 optimizer.zero_grad()
                 outputs = model(images)
+                # predictions[indices] = outputs.argmax(dim=1).cpu().numpy()
                 losses = criterion(outputs, labels) * loss_scale
                 loss = (weights * losses).sum()
                 loss.backward()
                 return losses, losses.mean().item() / loss_scale
+                        
             closure.device = device
             
             if optimizer_config['type'].lower() == 'adversarial':
@@ -163,13 +176,14 @@ def main(args):
             
             epoch_loss_sum += loss * images.size(0)
         
-        if optimizer_config['type'].lower() == 'adversarial':
-            losses_array[epoch] = optimizer.pi.detach().cpu().numpy()
-        avg_loss = epoch_loss_sum / train_size
-        
         logging.info("Evaluating model...")
         preds_after, _, train_accuracy = evaluate(model, train_loader, device)
         train_predictions[epoch] = preds_after
+        
+        if optimizer_config['type'].lower() == 'adversarial':
+            losses_array[epoch] = optimizer.pi.detach().cpu().numpy()
+            predictions = preds_after
+        avg_loss = epoch_loss_sum / train_size
         
         train_accuracies.append(train_accuracy)
         
@@ -179,7 +193,7 @@ def main(args):
         logging.info(f"Epoch {epoch + 1} average loss: {avg_loss:.4f}, val acc: {val_accuracy:.4f}, train acc: {train_accuracy:.4f}")
         
         labels_history[epoch] = train_dataset.corrupted_labels
-        correction_strategy.step(losses_array[epoch], predictions=predictions)
+        correction_strategy.step(losses_array[epoch], predictions=predictions, reset_f=reset)
     
         np.save(os.path.join(output_dir, "train_predictions.npy"), train_predictions)
         np.save(losses_path, losses_array)

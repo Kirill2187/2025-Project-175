@@ -1,0 +1,5 @@
+data:
+  dataset: cifar10
+  corruption:
+    - type: flip
+      p:    0.4

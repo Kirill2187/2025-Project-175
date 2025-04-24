@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn
 
+from torchvision.models import resnet18
+
 def create_model(config, input_shape):
     """
     Creates a PyTorch model from a configuration dictionary.
@@ -14,6 +16,13 @@ def create_model(config, input_shape):
     Returns:
         nn.Module: A PyTorch model built as a sequential container.
     """
+    if isinstance(config['model'], str):
+        if config['model'] == 'resnet18':
+            model = resnet18(weights=None, num_classes=10)
+            return model
+        else:
+            raise ValueError(f"Unsupported model type: {config['model']}")
+    
     layers_config = config['model']['layers']
     modules = []
     
