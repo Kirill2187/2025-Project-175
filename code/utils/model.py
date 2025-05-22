@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-from torchvision.models import resnet18
+from utils.resnet import ResNet18, ResNet34, PreResNet18
 
 def create_model(config, input_shape):
     """
@@ -17,8 +17,14 @@ def create_model(config, input_shape):
         nn.Module: A PyTorch model built as a sequential container.
     """
     if isinstance(config['model'], str):
-        if config['model'] == 'resnet18':
-            model = resnet18(weights=None, num_classes=10)
+        if config['model'] == 'preresnet18':
+            model = PreResNet18(num_classes=10)
+            return model
+        elif config['model'] == 'resnet18':
+            model = ResNet18(num_classes=10)
+            return model
+        elif config['model'] == 'resnet34':
+            model = ResNet34(num_classes=10)
             return model
         else:
             raise ValueError(f"Unsupported model type: {config['model']}")

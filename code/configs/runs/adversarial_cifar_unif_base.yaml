@@ -4,16 +4,17 @@ experiment:
 
 training:
   batch_size: 64
-  epochs: 48
+  epochs: 128
   optimizer:
     type: adversarial
     data_len: 50000
     batch_size: ${training.batch_size}
     lr: 0.001
     weight_decay: 0.0001
-    pi_lr: 0.0001
+    pi_lr: 0.00001
     pi_decay: 0.1
     mode: extragrad
+    is_min_min: true
 
 includes:
   - ../models/resnet18.yaml

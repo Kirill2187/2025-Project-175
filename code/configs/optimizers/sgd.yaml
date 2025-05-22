@@ -1,0 +1,9 @@
+optimizer:
+  type: sgd
+  lr: 0.02
+  momentum: 0.9
+  weight_decay: 0.001
+
+annealing:
+  type: step
+  milestones: [40, 80]

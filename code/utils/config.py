@@ -5,7 +5,7 @@ import re
 from pathlib import Path
 
 
-def load_config(config_path: str) -> Dict[Any, Any]:
+def load_config(config_path: str, resolve=False) -> Dict[Any, Any]:
     """
     Load YAML configuration with support for inheritance and variable interpolation.
     This function reads a YAML configuration file and processes it to:
@@ -33,7 +33,8 @@ def load_config(config_path: str) -> Dict[Any, Any]:
             config = deep_merge(include_config, config)
         del config['includes']
     
-    config = resolve_variables(config)
+    if resolve:
+        config = resolve_variables(config)
     
     return config
 

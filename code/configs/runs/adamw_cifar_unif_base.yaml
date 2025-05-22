@@ -4,7 +4,7 @@ experiment:
 
 training:
   batch_size: 64
-  epochs: 48
+  epochs: 128
   optimizer:
     type: adamw
     lr: 0.001

@@ -1,0 +1,18 @@
+experiment:
+  seed: 42
+  wandb_log: false
+
+training:
+  batch_size: 64
+  epochs: 128
+  optimizer:
+    type: adamw
+    lr: 0.001
+    weight_decay: 0.0001
+
+includes:
+  - ../models/resnet18.yaml
+  - ../datasets/cifar.yaml
+
+
+

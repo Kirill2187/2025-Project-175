@@ -1,0 +1,5 @@
+data:
+  dataset: cifar10
+  corruption:
+    - type: unif
+      p:    0.0

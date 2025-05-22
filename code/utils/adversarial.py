@@ -6,15 +6,21 @@ import math
 class AdversarialOptimizer(torch.optim.Optimizer):
     def __init__(self, params, data_len, batch_size, use_adam=True,
                  betas=(0.9, 0.999), lr=1e-3, weight_decay=1e-3,
-                 pi_decay=1e-7,  # eps=np.finfo(np.float32).eps,
+                 pi_decay=1e-3,  # eps=np.finfo(np.float32).eps,
                  eps=1e-20,
                  amsgrad=False,
-                 mode='extragrad', log=False, pi_lr=1e-3, pi_reg=None):
+                 mode='extragrad', log=False, pi_lr=None, pi_reg=None,
+                 is_min_min = False,
+                 use_momentum=False, momentum=0.9):
 
         defaults = dict(lr=lr, betas=betas, amsgrad=amsgrad)
         super(AdversarialOptimizer, self).__init__(params, defaults=defaults)
+        
+        assert not use_adam or not use_momentum
 
         self.use_adam = use_adam
+        self.use_momentum = use_momentum
+        self.momentum = momentum
         self.lr = lr
         if pi_lr is None:
             self.pi_lr = lr
@@ -38,6 +44,9 @@ class AdversarialOptimizer(torch.optim.Optimizer):
         self.mode = mode
         self.log = log
         self.loss = None
+
+        # Min-min
+        self.is_min_min = is_min_min
 
         self.__previous_params = None
         self.__pi_intermediate = None
@@ -124,6 +133,27 @@ class AdversarialOptimizer(torch.optim.Optimizer):
         step_size = self.lr * math.sqrt(bias_correction2) / bias_correction1
 
         return -step_size * exp_avg / denom
+    
+    def __sgd_grad(self, p, group):
+        if p.grad is None:
+            return None
+        
+        d_p = p.grad.data
+
+        if self.weight_decay != 0:
+            d_p = d_p.add(p.data, alpha=self.weight_decay)
+
+        if self.use_momentum and self.momentum != 0:
+            state = self.state[p]
+            if 'momentum_buffer' not in state:
+                buf = torch.clone(d_p).detach()
+                state['momentum_buffer'] = buf
+            else:
+                buf = state['momentum_buffer']
+                buf.mul_(self.momentum).add_(d_p)
+            d_p = buf
+        
+        return -d_p * self.lr
 
     def __extragrad_intermediate_step(self, closure, dataset_indexes):
         pi_selected = self.pi[dataset_indexes]
@@ -134,10 +164,16 @@ class AdversarialOptimizer(torch.optim.Optimizer):
                 self.__previous_params.append(p.data)
                 if self.use_adam:
                     p.data = p.data + self.__adam_grad(p, group, suffix=0.5)
+                elif self.use_momentum:
+                    p.data = p.data + self.__sgd_grad(p, group)
                 else:
                     p.data = p.data - self.lr * (p.grad.data + self.weight_decay * p.data)
 
-        losses = -losses.clone().detach()
+        if not self.is_min_min:
+            losses = -losses.clone().detach()
+        else:   
+            losses = +losses.clone().detach()  
+
         pi_grad = torch.zeros_like(self.pi, requires_grad=False)
         pi_grad[dataset_indexes] = losses
         pi_new_log = torch.log(self.pi + self.__eps) + self.pi_decay * self.pi_lr * torch.log(
@@ -153,11 +189,16 @@ class AdversarialOptimizer(torch.optim.Optimizer):
             for p in group['params']:
                 if self.use_adam:
                     p.data = self.__previous_params[t] + self.__adam_grad(p, group, suffix=1)
+                elif self.use_momentum:
+                    p.data = self.__previous_params[t] + self.__sgd_grad(p, group)
                 else:
                     p.data = self.__previous_params[t] - self.lr * (p.grad.data + self.weight_decay * p.data)
                 t += 1
 
-        losses = -losses.clone().detach()
+        if not self.is_min_min:
+            losses = -losses.clone().detach()
+        else:   
+            losses = +losses.clone().detach()  
         pi_grad = torch.zeros_like(self.pi, requires_grad=False)
         pi_grad[dataset_indexes] = losses
         pi_new_log = torch.log(self.pi + self.__eps) + self.pi_decay * self.pi_lr * torch.log(
@@ -182,12 +223,19 @@ class AdversarialOptimizer(torch.optim.Optimizer):
                 if self.use_adam:
                     p.grad.data = current_grad
                     p.data = p.data + self.__adam_grad(p, group)
+                elif self.use_momentum:
+                    p.grad.data = current_grad
+                    p.data = p.data + self.__sgd_grad(p, group)
                 else:
                     p.data = p.data - self.lr * (current_grad + self.weight_decay * p.data)
                 t += 1
         self.__prev_grads_theta = self.__prev_grads_theta[:t]
 
-        losses = -losses.clone().detach()
+        if not self.is_min_min:
+            losses = -losses.clone().detach()
+        else:   
+            losses = +losses.clone().detach()  
+
         pi_grad = torch.zeros_like(self.pi, requires_grad=False)
         pi_grad[dataset_indexes] = losses
         if self.__prev_grads_pi is not None:
@@ -213,6 +261,8 @@ class AdversarialOptimizer(torch.optim.Optimizer):
                     t += 1
                     if self.use_adam:
                         p.data = p.data + self.__adam_grad(p, group)
+                    elif self.use_momentum:
+                        p.data = p.data + self.__sgd_grad(p, group)
                     else:
                         p.data = p.data - self.lr * (p.grad.data + self.weight_decay * p.data)
         if self.__prev_grads_pi is not None:
@@ -234,10 +284,15 @@ class AdversarialOptimizer(torch.optim.Optimizer):
                 self.__prev_grads_theta.append(p.grad.data)
                 if self.use_adam:
                     p.data = self.__previous_params[t] + self.__adam_grad(p, group)
+                elif self.use_momentum:
+                    p.data = self.__previous_params[t] + self.__sgd_grad(p, group)
                 else:
                     p.data = self.__previous_params[t] - self.lr * (p.grad.data + self.weight_decay * p.data)
                 t += 1
-        losses = -losses.clone().detach()
+        if not self.is_min_min:
+            losses = -losses.clone().detach()
+        else:   
+            losses = +losses.clone().detach()  
         self.__prev_grads_pi
         pi_grad = torch.zeros_like(self.pi, requires_grad=False)
         pi_grad[dataset_indexes] = losses
